@@ -20,8 +20,8 @@
 
 
 Schedule::Schedule():
-	time(0), duration(0), on(0), active(0), sunrise(0), 
-	sunset(0), switchId(255), sensorId(255), threshold(100)
+	time(0), duration(0), on(0), active(0), 
+	switchId(255), sensorId(255), threshold(100)
 {
 	w.days = 0;
 	memcpy(name, 0, sizeof(name));
@@ -42,16 +42,6 @@ time_t Schedule::getDuration() const
 	return duration;
 }
 
-bool Schedule::getSunrise() const
-{
-	return sunrise;
-}
-
-bool Schedule::getSunset() const
-{
-	return sunset;
-}
-
 void Schedule::setTime(time_t _time)
 {
 	time = _time;
@@ -65,16 +55,6 @@ void Schedule::setDays(Week_t _w)
 void Schedule::setDuration(time_t d)
 {
 	duration = d;
-}
-
-void Schedule::setSunrise(bool _sunrise)
-{
-	sunrise = _sunrise;
-}
-
-void Schedule::setSunset(bool _sunset)
-{
-	sunset = _sunset;
 }
 
 void Schedule::setSwitchId(byte id)

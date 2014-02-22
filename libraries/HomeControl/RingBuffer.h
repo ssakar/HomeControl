@@ -27,7 +27,7 @@ template<class T, byte sz> class RingBuffer {
 public:
 	RingBuffer();
 	
-	void put(const T);
+	void put(const T&);
 	T& get();
 	void clear();
 	
@@ -47,7 +47,7 @@ RingBuffer<T, sz>::RingBuffer()
 }
 
 template<class T, byte sz> 
-void RingBuffer<T, sz>::put(const T elem)
+void RingBuffer<T, sz>::put(const T& elem)
 {
 	int i = (start + count) % sz;
 	data[i] = elem;

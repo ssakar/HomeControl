@@ -30,10 +30,10 @@ class Schedule {
 	time_t duration;
 	Week_t w;
 
-	bool on : 1;
+	bool on 	: 1;
 	bool active : 1;
-	bool sunrise : 1;
-	bool sunset : 1;
+	bool sensor : 1;
+	bool pin	: 1;
 
 	byte switchId;
 	byte sensorId;
@@ -52,8 +52,6 @@ public:
 	void setTime(time_t);
 	void setDays(Week_t);
 	void setDuration(time_t);
-	void setSunrise(bool);
-	void setSunset(bool);
 	
 	void setSwitchId(byte);
 	void setSensorId(byte);

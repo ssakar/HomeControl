@@ -24,7 +24,6 @@
 
 
 template<class T, byte sz> class SavedArray {
-	byte size;
 	void* eeprom;
 	T data[sz];
 public:
@@ -35,16 +34,15 @@ public:
 	void load();
 	
 	T& instance();
-	
-	T& operator[](byte) const;
-	T& operator[](byte);
-	
 	byte getSize() const;
+	
+	const T& operator[](byte) const;
+	T& operator[](byte);
 };
 
 template<class T, byte sz>
-SavedArray<T, sz>::SavedArray(void* ee)
-	:size(sz), eeprom(ee)
+SavedArray<T, sz>::SavedArray(void* ee):
+	eeprom(ee)
 {}
 
 template<class T, byte sz>
@@ -58,7 +56,7 @@ T& SavedArray<T, sz>::instance()
 }
 
 template<class T, byte sz>
-T& SavedArray<T, sz>::operator[](byte i) const
+const T& SavedArray<T, sz>::operator[](byte i) const
 {
 	return data[i];
 }
@@ -72,19 +70,19 @@ T& SavedArray<T, sz>::operator[](byte i)
 template<class T, byte sz>
 byte SavedArray<T, sz>::getSize() const
 {
-	return size;
+	return sz;
 }
 
 template<class T, byte sz>
 void SavedArray<T, sz>::save()
 {
-	eeprom_update_block(data, eeprom, sizeof(T)*size);	
+	eeprom_update_block(data, eeprom, sizeof(T)*sz);	
 }
 
 template<class T, byte sz>
 void SavedArray<T, sz>::load()
 {
-	eeprom_read_block(data, eeprom, sizeof(T)*size);	
+	eeprom_read_block(data, eeprom, sizeof(T)*sz);	
 }
 
 #endif

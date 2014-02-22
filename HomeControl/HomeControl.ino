@@ -25,18 +25,20 @@
 #include <OneWire.h>
 #include <DHT.h>
 
+#include <Util.h>
 #include <Switch.h>
 #include <Sensor.h>
+#include <DateTime.h>
 #include <Time.h>
+#include <Event.h>
 #include <Schedule.h>
 #include <TempSensor.h>
 #include <LightSensor.h>
 #include <HumidSensor.h>
-#include <SavedArray.h>
-#include <DateTime.h>
-#include <Util.h>
 #include <ClientHelper.h>
 #include <WebServer.h>
+#include <SavedArray.h>
+#include <RingBuffer.h>
 
 
 const int PIN_DHT11 = 7;
@@ -47,12 +49,14 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1346;
+const uint32_t MAGIC = 1350;
 const uint32_t WAIT_PERIOD = 60000;
+const int EVENT_DELAY = 5;
 const int SERVER_PORT = 80;
 const int MAX_SENSORS = 3;
 const int MAX_SWITCHES = 16;
 const int MAX_SCHEDULES = 32;
+const int MAX_EVENTS = 32;
 
 
 EEMEM uint32_t magic_ee;
@@ -71,6 +75,7 @@ SavedArray<Switch, MAX_SWITCHES> switches(&switch_ee);
 SavedArray<Schedule, MAX_SCHEDULES> schedules(&schedule_ee);
 SavedArray<Time, 1> timeConf(&time_ee);
 SavedArray<WebServer, 1> serverConf(&webServer_ee);
+RingBuffer<Event, MAX_EVENTS> eventLog;
 
 Time& time = timeConf.instance();
 WebServer& webServer = serverConf.instance();
@@ -79,7 +84,6 @@ Sensor* sensors[MAX_SENSORS] = {0};
 EthernetServer server(SERVER_PORT);
 
 uint32_t wait;
-
 
 void setup()
 {
@@ -168,8 +172,7 @@ void loop()
 	
 	if (switchControl.available()) {
 	
-		DEBUG_PRINT(switchControl.getReceivedValue());
-		DEBUG_PRINT("RF signal received");
+		logEvent(switchControl.getReceivedValue());
 		switchControl.resetAvailable();
 	}
 	
@@ -192,6 +195,25 @@ void reset()
 	DEBUG_PRINT("rebooting");
 	delay(1000);
 	asm volatile ("  jmp 0"); 
+}
+
+void logEvent(unsigned long id)
+{
+	time_t now = time.getTime().getUnix();
+	Event ev(id);
+	ev.setTime(now);
+	
+	Event& last = eventLog[eventLog.isEmpty() ? 0 : eventLog.getSize()-1];
+	
+	if (ev.getId() == last.getId() && 
+			ev.getTime() - last.getTime() < EVENT_DELAY) {
+		last.setTime(now);
+		DEBUG_PRINT("duplicate received");
+	} else { 
+		eventLog.put(ev);
+		DEBUG_PRINT("RF signal received");
+	}
+	DEBUG_PRINT(ev.getId());
 }
 
 void applySchedule(const Schedule& sched)
@@ -264,6 +286,8 @@ void handleGetRequest(EthernetClient& client)
 		sendSwitches(client);
 	} else if (strcmp(uri, "schedule") == 0) {
 		sendSchedules(client);
+	} else if (strcmp(uri, "event") == 0) {
+		sendEvents(client);
 	} else if (strcmp(uri, "setting") == 0) {
 		sendSettings(client);
 	} else if (strcmp(uri,"control") == 0) {
@@ -466,10 +490,6 @@ void handleSchedules(EthernetClient& client)
 			schedules[id].setThreshold(webClient.getValueFloat());
 		} else if (strcmp(key, "on") == 0) {
 			schedules[id].setOn(webClient.getValueInt());
-		} else if (strcmp(key, "sunrise") == 0) {
-			schedules[id].setSunrise(webClient.getValueInt());
-		} else if (strcmp(key, "sunset") == 0) {
-			schedules[id].setSunset(webClient.getValueInt());
 		} else if (strcmp(key, "time") == 0) {
 			int year = client.parseInt(); // 2014-02-15T17%3A20
 			client.find("-", 1);
@@ -550,6 +570,7 @@ void sendHeader(EthernetClient& client)
 		F("</style></head>") <<
 		F("<body><header><h1>HomeControl</h1><hr></header>") <<
 		F("<nav><a href='status'>Status</a> | ") << 
+		F("<a href='event'>Events</a> | ") <<
 		F("<a href='switch'>Switches</a> | ") <<
 		F("<a href='schedule'>Schedules</a> | ") <<
 		F("<a href='setting'>Settings</a><hr></nav>\n");
@@ -647,7 +668,7 @@ void sendSchedules(EthernetClient& client)
 		F("</fieldset></form>\n") <<
 
 		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>Time</th>") <<
-		F("<th>Duration</th><th>Days</th><th>Sunrise/Sunset</th><th>SwitchId</th>") <<
+		F("<th>Duration</th><th>Days</th><th>SwitchId</th>") <<
 		F("<th>SensorId</th><th>Threshold</th><th>Action</th></tr>\n");
 
 	for (int i = 0; i < schedules.getSize(); i++) {
@@ -659,12 +680,28 @@ void sendSchedules(EthernetClient& client)
 			DateTime(sched.getTime()) << F("</td><td>") <<
 			sched.getDuration()/60 << F("</td><td>") <<
 			sched.getDays().days << F("</td><td>") <<
-			sched.getSunrise() << "/" << sched.getSunset() << F("</td><td>") <<
 			sched.getSwitchId() << F("</td><td>") <<
 			sched.getSensorId() << F("</td><td>") <<
 			sched.getThreshold() << F("</td><td>") <<
 			(sched.turnOn() ? "On" : "Off") << F("</td></tr>\n");
 	}
+	client << F("</table></section>\n");
+	sendFooter(client);
+}
+
+void sendEvents(EthernetClient& client)
+{
+	DEBUG_PRINT();
+	sendHeader(client);
+	client << F("<section id='main'><table><tr><th>Id</th><th>Time</th></tr>\n");
+	
+	for (int i = 0; i < eventLog.getSize(); i++) {
+		Event& ev = eventLog[i];
+		client << F("<tr><td>") <<
+			ev.getId() << F("</td><td>") <<
+			DateTime(ev.getTime()) << F("</td></tr>\n");
+	}
+
 	client << F("</table></section>\n");
 	sendFooter(client);
 }
