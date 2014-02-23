@@ -49,7 +49,7 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1358;
+const uint32_t MAGIC = 1360;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SERVER_PORT = 80;
@@ -378,6 +378,10 @@ void handleControl(EthernetClient& client)
 				goto ERROR;
 			Switch& sw = switches[id];
 			doSwitch(sw, !sw.isOn());
+		} else if (strcmp(key, "clear") == 0) {
+			webClient.getValue();
+			eeprom_write_dword(&magic_ee, MAGIC + 5);
+			DEBUG_PRINT("cleared eeprom");
 		} else if (strcmp(key, "reboot") == 0) {
 			webClient.getValue();
 			reboot = true;
@@ -847,8 +851,11 @@ void sendSettings(EthernetClient& client)
 		F("DNS Server: <input type='text' name='dns' value='") << webServer.getDNS() << F("'><br>") <<
 		F("Password: <input type='password' name='host' size='10'><br>") << 
 		F("<input type='submit' value='Save'>") <<
-		F("</fieldset></form></section>\n");
-	
+		F("</fieldset></form></section>\n") <<
+
+		F("<a href='control?clear=1'>Clear Memory</a><br>") <<
+		F("<a href='control?reboot=1'>Reboot</a><br>");
+
 	sendFooter(client);
 }
 
