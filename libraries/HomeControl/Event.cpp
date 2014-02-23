@@ -47,3 +47,70 @@ time_t Event::getTime() const
 	return time;
 }
 
+
+EventRule::EventRule():
+	eventId(255), switchId(255), on(0), active(0), inv(0)
+{
+	memcpy(name, 0, sizeof(name));
+}
+
+void EventRule::setEventId(unsigned long id)
+{
+	eventId = id;
+}
+
+void EventRule::setSwitchId(byte id)
+{
+	switchId = id;
+}
+
+bool EventRule::turnOn() const
+{
+	return on;
+}
+
+void EventRule::setOn(bool _on)
+{
+	on = _on;
+}
+
+void EventRule::setToggle(bool toggle)
+{
+	inv = toggle;
+}
+
+unsigned long EventRule::getEventId() const
+{
+	return eventId;
+}
+
+byte EventRule::getSwitchId() const
+{
+	return switchId;
+}
+
+bool EventRule::toggle() const
+{
+	return inv;
+}
+
+bool EventRule::isActive() const
+{
+	return active;
+}
+
+void EventRule::setActive(bool act)
+{
+	active = act;
+}
+
+void EventRule::setName(const char* _name)
+{
+	strncpy(name, _name, sizeof(name));
+	name[RULE_NAME_SIZE] = '\0';
+}
+
+const char* EventRule::getName() const
+{
+	return name;
+}

@@ -23,6 +23,8 @@
 #include "Arduino.h"
 #include "Time.h"
 
+const int RULE_NAME_SIZE = 10;
+
 
 class Event {
 	unsigned long id;
@@ -30,37 +32,40 @@ class Event {
 public:
 	Event();
 	Event(unsigned long);
-	
+
 	void setId(unsigned long);
 	void setTime(time_t);
-	
+
 	unsigned long getId() const;
 	time_t getTime() const;
 };
 
 class EventRule {
-	unsigned long id;
-	byte act;
-	bool pin	: 1;
+	unsigned long eventId;
+	byte switchId;
 	bool on		: 1;
+	bool active : 1;
 	bool inv	: 1;
-	bool all	: 1;
+
+	char name[RULE_NAME_SIZE+1];
 public:
 	EventRule();
 
-	void setId(unsigned long);
-	void setActuator(byte);
-	void setPin(bool);
+	void setEventId(unsigned long);
+	void setSwitchId(byte);
 	void setOn(bool);
 	void setToggle(bool);
-	void setAll(bool);
-	
-	unsigned long getId() const;
-	byte getActuator() const;
-	bool isPin() const;
+
+	unsigned long getEventId() const;
+	byte getSwitchId() const;
 	bool turnOn() const;
 	bool toggle() const;
-	bool forAll() const;
+
+	bool isActive() const;
+	void setActive(bool);
+
+	void setName(const char*);
+	const char* getName() const;
 };
 
 #endif

@@ -32,8 +32,6 @@ class Schedule {
 
 	bool on 	: 1;
 	bool active : 1;
-	bool sensor : 1;
-	bool pin	: 1;
 
 	byte switchId;
 	byte sensorId;
@@ -46,8 +44,6 @@ public:
 	time_t getTime() const;
 	Week_t getDays() const;
 	time_t getDuration() const;
-	bool getSunrise() const;
-	bool getSunset() const;
 	
 	void setTime(time_t);
 	void setDays(Week_t);
@@ -64,7 +60,7 @@ public:
 	
 	bool turnOn() const;
 	void setOn(bool);
-	
+
 	bool isActive() const;
 	void setActive(bool);
 	

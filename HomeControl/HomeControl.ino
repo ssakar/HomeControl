@@ -49,13 +49,14 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1350;
+const uint32_t MAGIC = 1358;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SERVER_PORT = 80;
 const int MAX_SENSORS = 3;
 const int MAX_SWITCHES = 16;
 const int MAX_SCHEDULES = 32;
+const int MAX_RULES = 32;
 const int MAX_EVENTS = 32;
 
 
@@ -68,11 +69,13 @@ EEMEM WebServer webServer_ee;
 */
 EEMEM byte switch_ee[MAX_SWITCHES*sizeof(Switch)];
 EEMEM byte schedule_ee[MAX_SCHEDULES*sizeof(Schedule)];
+EEMEM byte rules_ee[MAX_RULES*sizeof(EventRule)];
 EEMEM byte time_ee[sizeof(Time)];
 EEMEM byte webServer_ee[sizeof(WebServer)];
 
 SavedArray<Switch, MAX_SWITCHES> switches(&switch_ee);
 SavedArray<Schedule, MAX_SCHEDULES> schedules(&schedule_ee);
+SavedArray<EventRule, MAX_RULES> eventRules(&rules_ee);
 SavedArray<Time, 1> timeConf(&time_ee);
 SavedArray<WebServer, 1> serverConf(&webServer_ee);
 RingBuffer<Event, MAX_EVENTS> eventLog;
@@ -96,12 +99,14 @@ void setup()
 	if (eeprom_read_dword(&magic_ee) == MAGIC) {
 		switches.load();
 		schedules.load();
+		eventRules.load();
 		timeConf.load();
 		serverConf.load();
 		DEBUG_PRINT("config loaded from eeprom");
 	} else {
 		switches.save();
 		schedules.save();
+		eventRules.save();
 		timeConf.save();
 		serverConf.save();
 		eeprom_write_dword(&magic_ee, MAGIC);
@@ -109,16 +114,17 @@ void setup()
 	}
 	DEBUG_PRINT(int(&magic_ee));
 	DEBUG_PRINT(int(&switch_ee));
+	DEBUG_PRINT(int(&rules_ee));
 	DEBUG_PRINT(int(&schedule_ee));
 	DEBUG_PRINT(int(&time_ee));
 	DEBUG_PRINT(int(&webServer_ee));
-	
+
 	sensors[0] = new TempSensor(PIN_TEMP);
 	sensors[1] = new LightSensor(PIN_LIGHT);
 	sensors[2] = new HumidSensor(PIN_DHT11);
-	
+
 	wait = millis() + WAIT_PERIOD;
-	
+
 	if (webServer.getDHCP()) {
 		Ethernet.begin(webServer.getMAC());
 		DEBUG_PRINT("using DHCP");
@@ -143,7 +149,7 @@ void setup()
 void loop()
 {
 	EthernetClient client = server.available();
-	
+
 	if (client) {
 		DEBUG_PRINT("client available");
 		while (client.connected()) {
@@ -169,15 +175,17 @@ void loop()
 		client.stop();
 		DEBUG_PRINT("client disconnected");
 	}
-	
+
 	if (switchControl.available()) {
-	
-		logEvent(switchControl.getReceivedValue());
+
+		unsigned long id = switchControl.getReceivedValue();
+		applyEventRules(id);
+		logEvent(id);
 		switchControl.resetAvailable();
 	}
 	
 	if (long(millis()-wait) >= 0) {
-		
+
 		for (int i = 0; i < schedules.getSize(); i++) {
 			applySchedule(schedules[i]);
 		}
@@ -202,7 +210,7 @@ void logEvent(unsigned long id)
 	time_t now = time.getTime().getUnix();
 	Event ev(id);
 	ev.setTime(now);
-	
+
 	Event& last = eventLog[eventLog.isEmpty() ? 0 : eventLog.getSize()-1];
 	
 	if (ev.getId() == last.getId() && 
@@ -214,6 +222,28 @@ void logEvent(unsigned long id)
 		DEBUG_PRINT("RF signal received");
 	}
 	DEBUG_PRINT(ev.getId());
+}
+
+void applyEventRules(unsigned long id)
+{
+	for (int i = 0; i < eventRules.getSize(); i++) {
+
+		EventRule& rule = eventRules[i];
+
+		if (!rule.isActive())
+			continue;
+
+		if (rule.getSwitchId() >= MAX_SWITCHES)
+			continue;
+
+		Switch& sw = switches[rule.getSwitchId()];
+
+		if (!sw.isActive())
+			continue;
+
+		if (rule.getEventId() == id)
+			doSwitch(sw, rule.toggle() ? !sw.isOn() : rule.turnOn());
+	}
 }
 
 void applySchedule(const Schedule& sched)
@@ -265,13 +295,16 @@ void applySchedule(const Schedule& sched)
 
 void doSwitch(Switch& sw, bool state)
 {
-	if (state)
+	if (sw.isPin()) {
+		pinMode(sw.getId(), OUTPUT);
+		digitalWrite(sw.getId(), state);
+	} else if (state) {
 		switchControl.switchOn(sw.getGroup(), sw.getDevice());
-	else
+	} else {
 		switchControl.switchOff(sw.getGroup(), sw.getDevice());
-	
+	}
 	sw.setOn(state);
-	DEBUG_PRINT("outlet switched");
+	DEBUG_PRINT("switched");
 }
 
 void handleGetRequest(EthernetClient& client)
@@ -279,7 +312,7 @@ void handleGetRequest(EthernetClient& client)
 	ClientHelper webClient(&client);
 	const char* uri = webClient.getRequestURI('c');
 	DEBUG_PRINT(uri);
-	
+
 	if (!uri || strcmp(uri, "status") == 0) {
 		sendStatus(client);
 	} else if (strcmp(uri, "switch") == 0) {
@@ -288,6 +321,8 @@ void handleGetRequest(EthernetClient& client)
 		sendSchedules(client);
 	} else if (strcmp(uri, "event") == 0) {
 		sendEvents(client);
+	} else if (strcmp(uri, "eventRules") == 0) {
+		sendEventRules(client);
 	} else if (strcmp(uri, "setting") == 0) {
 		sendSettings(client);
 	} else if (strcmp(uri,"control") == 0) {
@@ -303,13 +338,15 @@ void handlePostRequest(EthernetClient& client)
 	const char* uri = webClient.getRequestURI();
 	DEBUG_PRINT(uri);
 	webClient.skipHeader();
-	
+
 	if (strcmp(uri, "time") == 0) {
 		handleTime(client);
 	} else if (strcmp(uri, "server") == 0) {
 		handleServer(client);
 	} else if (strcmp(uri, "switch") == 0) {
 		handleSwitches(client);
+	} else if (strcmp(uri, "eventRules") == 0) {
+		handleEventRules(client);
 	} else if (strcmp(uri, "schedule") == 0) {
 		handleSchedules(client);
 	} else {
@@ -322,7 +359,7 @@ void handleControl(EthernetClient& client)
 	ClientHelper webClient(&client);
 	char* key = NULL;
 	bool reboot = false;
-	
+
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
 		if (strcmp(key, "switchon") == 0) {
@@ -360,7 +397,7 @@ void handleTime(EthernetClient& client)
 {
 	ClientHelper webClient(&client);
 	char* key = NULL;
-	
+
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
 		if (strcmp(key, "server") == 0) {
@@ -392,7 +429,7 @@ void handleServer(EthernetClient& client)
 	ClientHelper webClient(&client);
 	char* key = NULL;
 	bool dhcp = false;
-	
+
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
 		if (strcmp(key, "dhcp") == 0) { // checkbox
@@ -429,12 +466,49 @@ ERROR:
 	sendBadConfig(client);
 }
 
-void handleSwitches(EthernetClient& client)
-{	
+void handleEventRules(EthernetClient& client)
+{
 	ClientHelper webClient(&client);
 	char* key = NULL;
 	byte id = 0;
-	
+
+	while ((key = webClient.getKey()) != NULL) {
+		DEBUG_PRINT(key);
+		if (strcmp(key, "id") == 0) {
+			id = webClient.getValueInt();
+			if (id >= eventRules.getSize())
+				goto ERROR;
+		} else if (strcmp(key, "active") == 0) {
+			eventRules[id].setActive(webClient.getValueInt());
+		} else if (strcmp(key, "name") == 0) {
+			eventRules[id].setName(webClient.getValue());
+		} else if (strcmp(key, "eventId") == 0) {
+			eventRules[id].setEventId(atol(webClient.getValue()));
+		} else if (strcmp(key, "switchId") == 0) {
+			eventRules[id].setSwitchId(webClient.getValueInt());
+		} else if (strcmp(key, "action") == 0) {
+			int v = webClient.getValueInt();
+			if (v == 2)
+				eventRules[id].setToggle(true);
+			else
+				eventRules[id].setOn(v);
+		} else
+			webClient.getValue(); // consume value of unknown key
+	}
+	eventRules.save();
+	redirectStatus(client);
+	return;
+ERROR:
+	sendBadConfig(client);
+}
+
+void handleSwitches(EthernetClient& client)
+{
+	ClientHelper webClient(&client);
+	char* key = NULL;
+	byte id = 0;
+	bool pin = false;
+
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
 		if (strcmp(key, "id") == 0) {
@@ -442,17 +516,22 @@ void handleSwitches(EthernetClient& client)
 			if (id >= switches.getSize())
 				goto ERROR;
 		} else if (strcmp(key, "active") == 0) {
-			bool v = webClient.getValueInt();
-			switches[id].setActive(v);
+			switches[id].setActive(webClient.getValueInt());
 		} else if (strcmp(key, "name") == 0) {
 			switches[id].setName(webClient.getValue());
 		} else if (strcmp(key, "group") == 0) {
 			switches[id].setGroup(webClient.getValue());
 		} else if (strcmp(key, "device") == 0) {
 			switches[id].setDevice(webClient.getValue());
+		} else if (strcmp(key, "pin") == 0) {
+			webClient.getValue();
+			pin = true;
+		} else if (strcmp(key, "pinId") == 0) {
+			switches[id].setId((byte)webClient.getValueInt());
 		} else
 			webClient.getValue(); // consume value of unknown key
 	}
+	switches[id].setPin(pin);
 	switches.save();
 	redirectStatus(client);
 	return;
@@ -461,13 +540,13 @@ ERROR:
 }
 
 void handleSchedules(EthernetClient& client)
-{	
+{
 	ClientHelper webClient(&client);
 	char* key = NULL;
 	byte id = 0;
 	Week_t w;
 	w.days = 0;
-	
+
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
 		if (strcmp(key, "id") == 0) {
@@ -571,6 +650,7 @@ void sendHeader(EthernetClient& client)
 		F("<body><header><h1>HomeControl</h1><hr></header>") <<
 		F("<nav><a href='status'>Status</a> | ") << 
 		F("<a href='event'>Events</a> | ") <<
+		F("<a href='eventRules'>Rules</a> | ") <<
 		F("<a href='switch'>Switches</a> | ") <<
 		F("<a href='schedule'>Schedules</a> | ") <<
 		F("<a href='setting'>Settings</a><hr></nav>\n");
@@ -592,7 +672,7 @@ void sendStatus(EthernetClient& client)
 	sendHeader(client);
 	client << F("<section id='main'><table>") <<
 		F("<tr><th>Id</th><th>Name</th><th>Value</th></tr>");
-	
+
 	for (int i = 0; i < MAX_SENSORS; i++) {
 		client << F("<tr><td>") << 
 			i << F("</td><td>") <<
@@ -617,11 +697,13 @@ void sendSwitches(EthernetClient& client)
 		F("Name: <input type='text' name='name' value='My Switch'><br>") <<
 		F("Group: <input type='text' name='group' value='11111'><br>") <<
 		F("Device: <input type='text' name='device' value='10000'><br>") <<
+		F("Pin: <input type='checkbox' name='pin'>") <<
+		F(" Id: <input type='number' name='pinId' min='14' max='49'><br>") <<
 		F("<input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
 		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>Group</th>") <<
-		F("<th>Device</th><th>State</th><th></th></tr>\n");
+		F("<th>Device</th><th>Pin</th><th>State</th><th></th></tr>\n");
 	
 	for (int i = 0; i < switches.getSize(); i++) {
 		Switch& sw = switches[i];
@@ -631,6 +713,7 @@ void sendSwitches(EthernetClient& client)
 			sw.getName() << F("</td><td>") <<
 			sw.getGroup() << F("</td><td>") <<
 			sw.getDevice() << F("</td><td>") <<
+			(sw.isPin() ? "Yes/" : "No/") << sw.getId() << F("</td><td>") <<
 			(sw.isOn() ? "On" : "Off") << F("</td><td>") <<
 			F("<a href='control?toggle=") << i << F("'>toggle</a></td></tr>\n");
 	}
@@ -689,6 +772,42 @@ void sendSchedules(EthernetClient& client)
 	sendFooter(client);
 }
 
+void sendEventRules(EthernetClient& client)
+{
+	DEBUG_PRINT();
+	sendHeader(client);
+	client << F("<section id='main'>") <<
+		F("<form action='/eventRules' method='POST'>") <<
+		F("<fieldset class='inline-block'><legend>New Event Rule</legend>") <<
+		F("Id: <input type='number' name='id' min='0' max='255' value='0'>") <<
+		F("<select name='active'><option value='1' selected>Enable</option>") <<
+		F("<option value='0'>Disable</option></select><br>") <<
+		F("Name: <input type='text' name='name' value='My Rule'><br>") <<
+		F("EventId: <input type='text' name='eventId'><br>") <<
+		F("SwitchId: <input type='number' name='switchId' min='0' max='255' value='255'><br>") <<
+		F("Action: <select name='action'><option value='1' selected>On</option>") <<
+		F("<option value='0'>Off</option><option value='2'>Toggle</option></select><br>") <<
+		F("<input type='submit' value='Add'>") <<
+		F("</fieldset></form>\n") <<
+
+		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>EventId</th>") <<
+		F("<th>SwitchId</th><th>Toggle</th><th>Action</th></tr>\n");
+
+	for (int i = 0; i < eventRules.getSize(); i++) {
+		EventRule& rule = eventRules[i];
+		client << F("<tr><td>") << 
+			i << F("</td><td>") <<
+			rule.isActive() << F("</td><td>") <<
+			rule.getName() << F("</td><td>") <<
+			rule.getEventId() << F("</td><td>") <<
+			rule.getSwitchId() << F("</td><td>") <<
+			(rule.toggle() ? "Yes" : "No") << F("</td><td>") <<
+			(rule.turnOn() ? "On" : "Off") << F("</td></tr>\n");
+	}
+	client << F("</table></section>\n");
+	sendFooter(client);
+}
+
 void sendEvents(EthernetClient& client)
 {
 	DEBUG_PRINT();
@@ -718,7 +837,7 @@ void sendSettings(EthernetClient& client)
 		F("UTC Offset: <input type='number' name='offset' min='-12' max='12' value='") << time.getOffset()/3600 << F("'><br>") <<
 		F("<input type='submit' value='Save'>") <<
 		F("</fieldset></form>") <<
-		
+
 		F("<form action='/server' method='POST'>") <<
 		F("<fieldset class='inline-block'><legend>Server</legend>") <<
 		F("DHCP: <input type='checkbox' name='dhcp' ") << (webServer.getDHCP() ? "checked" : "") << F("><br>") <<

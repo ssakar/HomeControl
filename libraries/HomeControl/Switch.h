@@ -19,31 +19,41 @@
 #ifndef SWITCH_H
 #define SWITCH_H
 
+
+#include "Arduino.h"
+
+
 const int SWITCH_NAME_SIZE = 10;
 
 class Switch {
  	unsigned int group : 5;
  	unsigned int device : 5;
-	
 	bool on : 1;
+	bool pin : 1;
 	bool active : 1;
-	
+
+	byte id;
 	char name[SWITCH_NAME_SIZE+1];
 public:
 	Switch();
 
 	void setGroup(const char*);
 	void setDevice(const char*);
+	void setId(byte);
 
 	char* getGroup() const;
 	char* getDevice() const;
-	
+	byte getId() const;
+
 	bool isOn() const;
 	void setOn(bool);
 
+	bool isPin() const;
+	void setPin(bool);
+
 	bool isActive() const;
 	void setActive(bool);
-	
+
 	void setName(const char*);
 	const char* getName() const;
 };

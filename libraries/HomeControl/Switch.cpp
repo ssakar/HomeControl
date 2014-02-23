@@ -26,7 +26,7 @@ char device_buf[MAX_SIZE] = {0};
 
 
 Switch::Switch()
-	:group(0), device(0), on(0), active(0)
+	:group(0), device(0), id(0), on(0), pin(0), active(0)
 {
 	memcpy(name, 0, sizeof(name));
 }
@@ -49,6 +49,11 @@ void Switch::setDevice(const char* dev)
 		if (dev[i] == '1')
 			bitSet(device, i);
 	}
+}
+
+void Switch::setId(byte _id)
+{
+	id = _id;
 }
 
 char* Switch::getGroup() const
@@ -75,6 +80,11 @@ char* Switch::getDevice() const
 	return device_buf;
 }
 
+byte Switch::getId() const
+{
+	return id;
+}
+
 bool Switch::isOn() const
 {
 	return on;
@@ -83,6 +93,16 @@ bool Switch::isOn() const
 void Switch::setOn(bool _on)
 {
 	on = _on;
+}
+
+bool Switch::isPin() const
+{
+	return pin;
+}
+
+void Switch::setPin(bool _pin)
+{
+	pin = _pin;
 }
 
 bool Switch::isActive() const

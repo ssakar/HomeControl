@@ -20,7 +20,7 @@
 
 
 Schedule::Schedule():
-	time(0), duration(0), on(0), active(0), 
+	time(0), duration(0), on(0), active(0),
 	switchId(255), sensorId(255), threshold(100)
 {
 	w.days = 0;
@@ -66,7 +66,6 @@ void Schedule::setSensorId(byte id)
 {
 	sensorId = id;
 }
-
 
 byte Schedule::getSwitchId() const
 {
