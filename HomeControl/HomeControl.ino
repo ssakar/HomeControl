@@ -49,7 +49,7 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1360;
+const uint32_t MAGIC = 1375;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SERVER_PORT = 80;
@@ -183,7 +183,7 @@ void loop()
 		logEvent(id);
 		switchControl.resetAvailable();
 	}
-	
+
 	if (long(millis()-wait) >= 0) {
 
 		for (int i = 0; i < schedules.getSize(); i++) {
@@ -212,7 +212,7 @@ void logEvent(unsigned long id)
 	ev.setTime(now);
 
 	Event& last = eventLog[eventLog.isEmpty() ? 0 : eventLog.getSize()-1];
-	
+
 	if (ev.getId() == last.getId() && 
 			ev.getTime() - last.getTime() < EVENT_DELAY) {
 		last.setTime(now);
@@ -313,6 +313,11 @@ void handleGetRequest(EthernetClient& client)
 	const char* uri = webClient.getRequestURI('c');
 	DEBUG_PRINT(uri);
 
+	if (!webClient.isAuthorized(webServer.getPassw())) {
+		sendAuth(client);
+		return;
+	}
+
 	if (!uri || strcmp(uri, "status") == 0) {
 		sendStatus(client);
 	} else if (strcmp(uri, "switch") == 0) {
@@ -337,6 +342,11 @@ void handlePostRequest(EthernetClient& client)
 	ClientHelper webClient(&client);
 	const char* uri = webClient.getRequestURI();
 	DEBUG_PRINT(uri);
+
+	if (!webClient.isAuthorized(webServer.getPassw())) {
+		sendAuth(client);
+		return;
+	}
 	webClient.skipHeader();
 
 	if (strcmp(uri, "time") == 0) {
@@ -456,9 +466,8 @@ void handleServer(EthernetClient& client)
 			if (!(addr == INADDR_NONE))
 				webServer.setDNS(addr);
 		} else if (strcmp(key, "host") == 0) { 
-			const char* pass = webClient.getValue();// actually password
-			if (strlen(pass) > 6)
-				webServer.setPassw(pass);
+			webServer.setPassw(webClient.getValue())
+			DEBUG_PRINT(webServer.getPassw());
 		} else
 			webClient.getValue(); // consume value of unknown key
 	}
@@ -870,6 +879,14 @@ void redirectStatus(EthernetClient& client)
 	DEBUG_PRINT();
 	client << F("HTTP/1.0 303 See Other\r\n") << 
 		F("Location: /status\r\n") << 
+		F("\r\n");
+}
+
+void sendAuth(EthernetClient& client)
+{
+	DEBUG_PRINT();
+	client << F("HTTP/1.0 401 Authorization Required\r\n") <<
+		F("WWW-Authenticate: Basic realm='HomeControl'\r\n") <<
 		F("\r\n");
 }
 

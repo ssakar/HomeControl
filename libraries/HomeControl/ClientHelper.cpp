@@ -22,7 +22,7 @@
 namespace {
 	const int MAX_SIZE = 32;
 	char buffer[MAX_SIZE+1];
-	
+
 	inline void clearBuffer()
 	{
 		memset(buffer, 0, sizeof(buffer));
@@ -36,7 +36,7 @@ ClientHelper::ClientHelper(Client* _client):
 int ClientHelper::getRequestType()
 {
 	clearBuffer();
-	
+
 	if (client->readBytesUntil('/', buffer, sizeof(buffer))) {
 		if (strcmp(buffer, "GET ") == 0) {
 			return ClientHelper::GET;
@@ -51,12 +51,12 @@ int ClientHelper::getRequestType()
 const char* ClientHelper::getRequestURI(char c)
 {
 	clearBuffer();
-	
+
 	c = client->peek() == c ? '?' : ' ';
 	
 	if (client->readBytesUntil(c, buffer, sizeof(buffer))) 
 		return buffer;
-	
+
 	return NULL;
 }
 
@@ -69,23 +69,23 @@ bool ClientHelper::skipHeader()
 char* ClientHelper::getKey()
 {
 	clearBuffer();
-	
+
 	if (client->peek() == '&')
 		client->read();
-	
+
 	if (client->readBytesUntil('=', buffer, sizeof(buffer)))
 		return buffer;
-	
+
 	return NULL;
 }
 
 const char* ClientHelper::getValue()
 {
 	clearBuffer();
-		
+
 	if (client->readBytesUntil('&', buffer, sizeof(buffer)))
 		return buffer;
-	
+
 	return NULL;
 }
 
@@ -105,6 +105,17 @@ const uint8_t* ClientHelper::getValueIP()
 	
 	for (int i = 0; i < 4; i++)
 		ip[i] = client->parseInt();
-	
+
 	return ip;
+}
+
+bool ClientHelper::isAuthorized(char* base64)
+{
+	char header[] = "Authorization:";
+
+	if (client->find(header, strlen(header)) &&
+			client->find(base64, strlen(base64)))
+		return true;
+
+	return false;
 }

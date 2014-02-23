@@ -33,16 +33,17 @@ public:
 	IPAddress getGW() const;
 	IPAddress getDNS() const;
 	IPAddress getMask() const;
-	const char* getPassw() const;
+	char* getPassw();
 	
 	void setDHCP(bool);
 	void setIP(const IPAddress&);
 	void setGW(const IPAddress&);
 	void setDNS(const IPAddress&);
 	void setMask(const IPAddress&);
-	void setPassw(const char*);
+	bool setPassw(const char*);
 	
-	static const byte PASSW_SIZE = 10;
+	static const byte MIN_PASSW_SIZE = 16;
+	static const byte MAX_PASSW_SIZE = 32;
 private:
 	bool dhcp;
 	IPAddress ip;

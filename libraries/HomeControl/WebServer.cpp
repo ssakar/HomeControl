@@ -19,6 +19,24 @@
 #include "WebServer.h" 
 
 
+namespace {
+
+	void fixPadding(char* base, int size)
+	{
+		char* str = base + size - 6;
+
+		if (strcmp(str, "%3D%3D") == 0) {
+			str[0] = '=';
+			str[1] = '=';
+			str[2] = '\0';
+		} else if (strcmp(str + 3, "%3D") == 0) {
+			str[3] = '=';
+			str[4] = '\0';
+		}
+	}
+}
+
+
 WebServer::WebServer():
 	dhcp(true)
 {
@@ -30,7 +48,8 @@ WebServer::WebServer():
 	mac[4] = 0x00;	
 	mac[5] = 0xAA;	
 	
-	strncpy(passw, "0000", PASSW_SIZE);
+	// admin:admin
+	strncpy(passw, "YWRtaW46YWRtaW4=", PASSW_SIZE);
 }
 
 byte* WebServer::getMAC() 
@@ -63,7 +82,7 @@ IPAddress WebServer::getMask() const
 	return mask;
 }
 
-const char* WebServer::getPassw() const
+char* WebServer::getPassw()
 {
 	return passw;
 }
@@ -93,7 +112,14 @@ void WebServer::setMask(const IPAddress& _mask)
 	mask = _mask;
 }
 
-void WebServer::setPassw(const char* _passw)
+bool WebServer::setPassw(const char* _passw)
 {
-	strncpy(passw, _passw, PASSW_SIZE);
+	if (strlen(_passw) < MIN_PASSW_SIZE)
+		return false;
+
+	strncpy(passw, _passw, MAX_PASSW_SIZE);
+	fixPadding(passw, strlen(passw));
+
+	return true;
 }
+

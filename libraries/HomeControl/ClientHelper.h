@@ -29,13 +29,15 @@ public:
 	ClientHelper(Client*);
 	
 	int getRequestType(); 
-	const char* getRequestURI(char = ' ');
+	const char* getRequestURI(char = '-');
 	bool skipHeader();
 	char* getKey();
 	const char* getValue();
 	int getValueInt();
 	float getValueFloat();
 	const uint8_t* getValueIP();
+
+	bool isAuthorized(char*);
 
 	static const int GET = 1;
 	static const int POST = 2;
