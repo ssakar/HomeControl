@@ -51,7 +51,7 @@ private:
 	IPAddress dns;
 	IPAddress mask;
 	byte mac[6];
-	char passw[PASSW_SIZE+1];
+	char passw[MAX_PASSW_SIZE+1];
 };
 
 #endif

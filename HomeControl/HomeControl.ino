@@ -49,7 +49,7 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1375;
+const uint32_t MAGIC = 1380;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SERVER_PORT = 80;
@@ -466,7 +466,7 @@ void handleServer(EthernetClient& client)
 			if (!(addr == INADDR_NONE))
 				webServer.setDNS(addr);
 		} else if (strcmp(key, "host") == 0) { 
-			webServer.setPassw(webClient.getValue())
+			webServer.setPassw(webClient.getValue());
 			DEBUG_PRINT(webServer.getPassw());
 		} else
 			webClient.getValue(); // consume value of unknown key

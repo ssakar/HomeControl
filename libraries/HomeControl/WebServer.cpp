@@ -49,7 +49,7 @@ WebServer::WebServer():
 	mac[5] = 0xAA;	
 	
 	// admin:admin
-	strncpy(passw, "YWRtaW46YWRtaW4=", PASSW_SIZE);
+	strncpy(passw, "YWRtaW46YWRtaW4=", MAX_PASSW_SIZE);
 }
 
 byte* WebServer::getMAC() 
