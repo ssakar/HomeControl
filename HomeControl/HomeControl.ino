@@ -52,6 +52,7 @@ const int PIN_LIGHT = 0;
 const uint32_t MAGIC = 1385;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
+const int SEND_REPEAT = 3;
 const int SERVER_PORT = 80;
 const int MAX_SENSORS = 3;
 const int MAX_SWITCHES = 16;
@@ -241,8 +242,11 @@ void applyEventRules(unsigned long id)
 		if (!sw.isActive())
 			continue;
 
-		if (rule.getEventId() == id)
-			doSwitch(sw, rule.toggle() ? !sw.isOn() : rule.turnOn());
+		if (rule.getEventId() != id)
+			continue;
+
+		if (rule.toggle() || rule.turnOn() != sw.isOn())
+			doSwitch(sw, !sw.isOn());
 	}
 }
 
@@ -299,9 +303,15 @@ void doSwitch(Switch& sw, bool state)
 		pinMode(sw.getId(), OUTPUT);
 		digitalWrite(sw.getId(), state);
 	} else if (state) {
-		switchControl.switchOn(sw.getGroup(), sw.getDevice());
+		for (int i = 0; i < SEND_REPEAT; i++) {
+			switchControl.switchOn(sw.getGroup(), sw.getDevice());
+			delay(5);
+		}
 	} else {
-		switchControl.switchOff(sw.getGroup(), sw.getDevice());
+		for (int i = 0; i < SEND_REPEAT; i++) {
+			switchControl.switchOff(sw.getGroup(), sw.getDevice());
+			delay(5);
+		}
 	}
 	sw.setOn(state);
 	DEBUG_PRINT("switched");
@@ -732,14 +742,17 @@ void sendSwitches(EthernetClient& client)
 		F("<label></label><input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
-		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>Group</th>") <<
+		F("<table><tr><th>Id</th><th>Name</th><th>Group</th>") <<
 		F("<th>Device</th><th>Pin</th><th>State</th><th></th></tr>\n");
 	
 	for (int i = 0; i < switches.getSize(); i++) {
 		Switch& sw = switches[i];
+
+		if (!sw.isActive())
+			continue;
+
 		client << F("<tr><td>") << 
 			i << F("</td><td>") <<
-			sw.isActive() << F("</td><td>") <<
 			sw.getName() << F("</td><td>") <<
 			sw.getGroup() << F("</td><td>") <<
 			sw.getDevice() << F("</td><td>") <<
@@ -780,15 +793,18 @@ void sendSchedules(EthernetClient& client)
 		F("<label></label><input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
-		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>Time</th>") <<
+		F("<table><tr><th>Id</th><th>Name</th><th>Time</th>") <<
 		F("<th>Duration</th><th>Days</th><th>SwitchId</th>") <<
 		F("<th>SensorId</th><th>Threshold</th><th>Action</th></tr>\n");
 
 	for (int i = 0; i < schedules.getSize(); i++) {
 		Schedule& sched = schedules[i];
+
+		if (!sched.isActive())
+			continue;
+
 		client << F("<tr><td>") << 
 			i << F("</td><td>") <<
-			sched.isActive() << F("</td><td>") <<
 			sched.getName() << F("</td><td>") <<
 			DateTime(sched.getTime()) << F("</td><td>") <<
 			sched.getDuration()/60 << F("</td><td>") <<
@@ -820,14 +836,17 @@ void sendEventRules(EthernetClient& client)
 		F("<label></label><input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
-		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>EventId</th>") <<
+		F("<table><tr><th>Id</th><th>Name</th><th>EventId</th>") <<
 		F("<th>SwitchId</th><th>Toggle</th><th>Action</th></tr>\n");
 
 	for (int i = 0; i < eventRules.getSize(); i++) {
 		EventRule& rule = eventRules[i];
+
+		if (!rule.isActive())
+			continue;
+
 		client << F("<tr><td>") << 
 			i << F("</td><td>") <<
-			rule.isActive() << F("</td><td>") <<
 			rule.getName() << F("</td><td>") <<
 			rule.getEventId() << F("</td><td>") <<
 			rule.getSwitchId() << F("</td><td>") <<
