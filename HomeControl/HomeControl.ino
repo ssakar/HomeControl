@@ -49,7 +49,7 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1380;
+const uint32_t MAGIC = 1385;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SERVER_PORT = 80;
@@ -313,13 +313,12 @@ void handleGetRequest(EthernetClient& client)
 	const char* uri = webClient.getRequestURI('c');
 	DEBUG_PRINT(uri);
 
-	if (!webClient.isAuthorized(webServer.getPassw())) {
-		sendAuth(client);
-		return;
-	}
-
 	if (!uri || strcmp(uri, "status") == 0) {
 		sendStatus(client);
+	} else if (strcmp(uri,"control") == 0) {
+		handleControl(client);
+	} else if (!webClient.isAuthorized(webServer.getPassw())) {
+		sendAuth(client);
 	} else if (strcmp(uri, "switch") == 0) {
 		sendSwitches(client);
 	} else if (strcmp(uri, "schedule") == 0) {
@@ -330,8 +329,6 @@ void handleGetRequest(EthernetClient& client)
 		sendEventRules(client);
 	} else if (strcmp(uri, "setting") == 0) {
 		sendSettings(client);
-	} else if (strcmp(uri,"control") == 0) {
-		handleControl(client);
 	} else {
 		sendError(client);
 	}
@@ -368,7 +365,6 @@ void handleControl(EthernetClient& client)
 {
 	ClientHelper webClient(&client);
 	char* key = NULL;
-	bool reboot = false;
 
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
@@ -388,19 +384,10 @@ void handleControl(EthernetClient& client)
 				goto ERROR;
 			Switch& sw = switches[id];
 			doSwitch(sw, !sw.isOn());
-		} else if (strcmp(key, "clear") == 0) {
-			webClient.getValue();
-			eeprom_write_dword(&magic_ee, MAGIC + 5);
-			DEBUG_PRINT("cleared eeprom");
-		} else if (strcmp(key, "reboot") == 0) {
-			webClient.getValue();
-			reboot = true;
 		} else {
 			webClient.getValue(); // consume value of unknown key
 		}
 	}
-	if (reboot)
-		reset();
 	redirectStatus(client);
 	return;
 ERROR:
@@ -442,7 +429,9 @@ void handleServer(EthernetClient& client)
 {
 	ClientHelper webClient(&client);
 	char* key = NULL;
-	bool dhcp = false;
+	bool dhcp = false,
+		reboot = false,
+		clear = false;
 
 	while ((key = webClient.getKey()) != NULL) {
 		DEBUG_PRINT(key);
@@ -468,11 +457,25 @@ void handleServer(EthernetClient& client)
 		} else if (strcmp(key, "host") == 0) { 
 			webServer.setPassw(webClient.getValue());
 			DEBUG_PRINT(webServer.getPassw());
+		} else if (strcmp(key, "clear") == 0) {
+			webClient.getValue();
+			clear = true;
+		} else if (strcmp(key, "reboot") == 0) {
+			webClient.getValue();
+			reboot = true;
 		} else
 			webClient.getValue(); // consume value of unknown key
 	}
-	webServer.setDHCP(dhcp);
-	serverConf.save();
+	if (clear) {
+		eeprom_write_dword(&magic_ee, MAGIC + 5);
+		reboot = true;
+		DEBUG_PRINT("cleared eeprom");
+	} else {
+		webServer.setDHCP(dhcp);
+		serverConf.save();
+	}
+	if (reboot)
+		reset();
 	redirectStatus(client);
 	return;
 ERROR:
@@ -658,7 +661,9 @@ void sendHeader(EthernetClient& client)
 		F("<style type='text/css'>") <<
 		F("body {color: white; background: black;}") <<
 		F("a {color: white; background: black;}") <<
-		F("fieldset.inline-block {display: inline-block;}") <<
+		F("fieldset.inline-block {display: inline-block;min-width: 300px;}") <<
+		F("label {display: block;width: 100px;float: left;margin: 2px 4px 6px 4px;text-align: right;}") <<
+		F("br {clear: left;}") <<
 		F("</style></head>") <<
 		F("<body><header><h1>HomeControl</h1><hr></header>") <<
 		F("<nav><a href='status'>Status</a> | ") << 
@@ -675,7 +680,7 @@ void sendFooter(EthernetClient& client)
 	client << F("<footer><hr>") <<
 		F("Free RAM: ") << freeRam() <<
 		F("<br>Time: ") << time.getTime() <<
-		F("<br>Uptime: ") << millis() <<
+		F("<br>Uptime: ") << millis()/1000 <<
 		F("</footer></body></html>\n");
 }
 
@@ -687,12 +692,24 @@ void sendStatus(EthernetClient& client)
 		F("<tr><th>Id</th><th>Name</th><th>Value</th></tr>");
 
 	for (int i = 0; i < MAX_SENSORS; i++) {
-		client << F("<tr><td>") << 
+		client << F("<tr><td>") <<
 			i << F("</td><td>") <<
 			sensors[i]->getName() << F("</td><td>") <<
 			sensors[i]->read() << F("</td></tr>\n"); 
 	}
 
+	for (int i = 0; i < switches.getSize(); i++) {
+		Switch& sw = switches[i];
+
+		if (!sw.isActive())
+			continue;
+
+		client << F("<tr><td>") <<
+			i << F("</td><td>") <<
+			sw.getName() << F("</td><td>") <<
+			F("<a href='control?switch") << (sw.isOn() ? "off=" : "on=") << i <<
+			F("'>Turn ") << (sw.isOn() ? "Off" : "On") << F("</a></td></tr>\n");
+	}
 	client << F("</table></section>\n");
 	sendFooter(client);
 }
@@ -704,15 +721,15 @@ void sendSwitches(EthernetClient& client)
 	client << F("<section id='main'>") <<
 		F("<form action='/switch' method='POST'>") <<
 		F("<fieldset class='inline-block'><legend>New Switch</legend>") <<
-		F("Id: <input type='number' name='id' min='0' max='255' value='0'>") <<
+		F("<label>Id: </label><input type='number' name='id' min='0' max='255' value='0'>") <<
 		F("<select name='active'><option value='1' selected>Enable</option>") <<
 		F("<option value='0'>Disable</option></select><br>") <<
-		F("Name: <input type='text' name='name' value='My Switch'><br>") <<
-		F("Group: <input type='text' name='group' value='11111'><br>") <<
-		F("Device: <input type='text' name='device' value='10000'><br>") <<
-		F("Pin: <input type='checkbox' name='pin'>") <<
+		F("<label>Name: </label><input type='text' name='name' value='My Switch'><br>") <<
+		F("<label>Group: </label><input type='text' name='group' value='11111'><br>") <<
+		F("<label>Device: </label><input type='text' name='device' value='10000'><br>") <<
+		F("<label>Pin: </label><input type='checkbox' name='pin'>") <<
 		F(" Id: <input type='number' name='pinId' min='14' max='49'><br>") <<
-		F("<input type='submit' value='Add'>") <<
+		F("<label></label><input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
 		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>Group</th>") <<
@@ -741,12 +758,12 @@ void sendSchedules(EthernetClient& client)
 	client << F("<section id='main'>") <<
 		F("<form action='/schedule' method='POST'>") <<
 		F("<fieldset class='inline-block'><legend>New Schedule</legend>") <<
-		F("Id: <input type='number' name='id' min='0' max='255' value='0'>") <<
+		F("<label>Id: </label><input type='number' name='id' min='0' max='255' value='0'>") <<
 		F("<select name='active'><option value='1' selected>Enable</option>") <<
 		F("<option value='0'>Disable</option></select><br>") <<
-		F("Name: <input type='text' name='name' value='My Schedule'><br>") <<
-		F("Time: <input type='datetime-local' autocomplete='on' name='time'><br>") <<
-		F("Duration: <input type='number' name='duration' min='1' max='1440' value='60'>min<br>") <<
+		F("<label>Name: </label><input type='text' name='name' value='My Schedule'><br>") <<
+		F("<label>Time: </label><input type='datetime-local' autocomplete='on' name='time'><br>") <<
+		F("<label>Duration: </label><input type='number' name='duration' min='1' max='1440' value='60'>min<br>") <<
 		F("Sun <input type='checkbox' name='sun'>") <<
 		F("Mon <input type='checkbox' name='mon'>") <<
 		F("Tue <input type='checkbox' name='tue'>") <<
@@ -755,12 +772,12 @@ void sendSchedules(EthernetClient& client)
 		F("Fri <input type='checkbox' name='fri'>") <<
 		F("Sat <input type='checkbox' name='sat'>") <<
 		F("All <input type='checkbox' name='all'><br>") <<
-		F("SwitchId: <input type='number' name='switch' min='0' max='255' value='255'><br>") <<
-		F("SensorId: <input type='number' name='sensor' min='0' max='255' value='255'><br>") <<
-		F("Threshold: <input type='text' name='threshold' value='100'><br>") <<
-		F("Action: <select name='on'><option value='1' selected>On</option>") <<
+		F("<label>SwitchId: </label><input type='number' name='switch' min='0' max='255' value='255'><br>") <<
+		F("<label>SensorId: </label><input type='number' name='sensor' min='0' max='255' value='255'><br>") <<
+		F("<label>Threshold: </label><input type='text' name='threshold' value='100'><br>") <<
+		F("<label>Action: </label><select name='on'><option value='1' selected>On</option>") <<
 		F("<option value='0'>Off</option></select><br>") <<
-		F("<input type='submit' value='Add'>") <<
+		F("<label></label><input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
 		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>Time</th>") <<
@@ -792,15 +809,15 @@ void sendEventRules(EthernetClient& client)
 	client << F("<section id='main'>") <<
 		F("<form action='/eventRules' method='POST'>") <<
 		F("<fieldset class='inline-block'><legend>New Event Rule</legend>") <<
-		F("Id: <input type='number' name='id' min='0' max='255' value='0'>") <<
+		F("<label>Id: </label><input type='number' name='id' min='0' max='255' value='0'>") <<
 		F("<select name='active'><option value='1' selected>Enable</option>") <<
 		F("<option value='0'>Disable</option></select><br>") <<
-		F("Name: <input type='text' name='name' value='My Rule'><br>") <<
-		F("EventId: <input type='text' name='eventId'><br>") <<
-		F("SwitchId: <input type='number' name='switchId' min='0' max='255' value='255'><br>") <<
-		F("Action: <select name='action'><option value='1' selected>On</option>") <<
+		F("<label>Name: </label><input type='text' name='name' value='My Rule'><br>") <<
+		F("<label>EventId: </label><input type='text' name='eventId'><br>") <<
+		F("<label>SwitchId: </label><input type='number' name='switchId' min='0' max='255' value='255'><br>") <<
+		F("<label>Action: </label><select name='action'><option value='1' selected>On</option>") <<
 		F("<option value='0'>Off</option><option value='2'>Toggle</option></select><br>") <<
-		F("<input type='submit' value='Add'>") <<
+		F("<label></label><input type='submit' value='Add'>") <<
 		F("</fieldset></form>\n") <<
 
 		F("<table><tr><th>Id</th><th>Active</th><th>Name</th><th>EventId</th>") <<
@@ -845,25 +862,24 @@ void sendSettings(EthernetClient& client)
 	client << F("<section id='main'>") <<
 		F("<form action='/time' method='POST'>") <<
 		F("<fieldset class='inline-block'><legend>Time</legend>") <<
-		F("NTP Server: <input type='text' name='server' value='") << time.getTimeServer() << F("'><br>") <<
-		F("Sync Interval: <input type='number' name='interval' min='1' max='240' value='") << time.getSyncInterval()/3600 << F("'><br>") <<
-		F("UTC Offset: <input type='number' name='offset' min='-12' max='12' value='") << time.getOffset()/3600 << F("'><br>") <<
-		F("<input type='submit' value='Save'>") <<
+		F("<label>NTP Server: </label><input type='text' name='server' value='") << time.getTimeServer() << F("'><br>") <<
+		F("<label>Sync Interval: </label><input type='number' name='interval' min='1' max='240' value='") << time.getSyncInterval()/3600 << F("'><br>") <<
+		F("<label>UTC Offset: </label><input type='number' name='offset' min='-12' max='12' value='") << time.getOffset()/3600 << F("'><br>") <<
+		F("<label></label><input type='submit' value='Save'>") <<
 		F("</fieldset></form>") <<
 
 		F("<form action='/server' method='POST'>") <<
 		F("<fieldset class='inline-block'><legend>Server</legend>") <<
-		F("DHCP: <input type='checkbox' name='dhcp' ") << (webServer.getDHCP() ? "checked" : "") << F("><br>") <<
-		F("IP Address: <input type='text' name='ip' value='") << webServer.getIP() << F("'><br>") <<
-		F("Gateway: <input type='text' name='gw' value='") << webServer.getGW() << F("'><br>") <<
-		F("Subnet: <input type='text' name='mask' value='") << webServer.getMask() << F("'><br>") <<
-		F("DNS Server: <input type='text' name='dns' value='") << webServer.getDNS() << F("'><br>") <<
-		F("Password: <input type='password' name='host' size='10'><br>") << 
-		F("<input type='submit' value='Save'>") <<
-		F("</fieldset></form></section>\n") <<
-
-		F("<a href='control?clear=1'>Clear Memory</a><br>") <<
-		F("<a href='control?reboot=1'>Reboot</a><br>");
+		F("<label>DHCP: </label><input type='checkbox' name='dhcp' ") << (webServer.getDHCP() ? "checked" : "") << F("><br>") <<
+		F("<label>IP Address: </label><input type='text' name='ip' value='") << webServer.getIP() << F("'><br>") <<
+		F("<label>Gateway: </label><input type='text' name='gw' value='") << webServer.getGW() << F("'><br>") <<
+		F("<label>Subnet: </label><input type='text' name='mask' value='") << webServer.getMask() << F("'><br>") <<
+		F("<label>DNS Server: </label><input type='text' name='dns' value='") << webServer.getDNS() << F("'><br>") <<
+		F("<label>Password: </label><input type='password' name='host'><br>") << 
+		F("<label>Clear Settings: </label><input type='checkbox' name='clear'><br>") <<
+		F("<label>Reboot: </label><input type='checkbox' name='reboot'><br>") <<
+		F("<label></label><input type='submit' value='Save'>") <<
+		F("</fieldset></form></section>\n");
 
 	sendFooter(client);
 }

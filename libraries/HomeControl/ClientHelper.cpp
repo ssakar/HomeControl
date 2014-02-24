@@ -111,11 +111,6 @@ const uint8_t* ClientHelper::getValueIP()
 
 bool ClientHelper::isAuthorized(char* base64)
 {
-	char header[] = "Authorization:";
-
-	if (client->find(header, strlen(header)) &&
-			client->find(base64, strlen(base64)))
-		return true;
-
-	return false;
+	return client->find(base64, strlen(base64));
 }
+
