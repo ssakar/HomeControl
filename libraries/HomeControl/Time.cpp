@@ -34,7 +34,7 @@ namespace {
 	const byte PACKET_SIZE = 48;
 	
 	byte buffer[PACKET_SIZE];
-
+	EthernetUDP udp; // workaround: pre-allocated udp socket
 
 	byte decTobcd(byte val)
 	{
@@ -52,9 +52,14 @@ Time::Time():
 	interval(SECS_PER_DAY), // sync daily
 	utc(SECS_PER_HOUR) // +1h Berlin
 {
-	ntpServer[0] = IPAddress(192, 53, 103, 108);
-	ntpServer[1] = IPAddress(81, 94, 123, 17);
+	ntpServer[0] = IPAddress(81, 94, 123, 17);
+	ntpServer[1] = IPAddress(192, 53, 103, 108);
+}
+
+void Time::begin()
+{
 	Wire.begin();
+	udp.begin(LOCAL_PORT);
 }
 
 void Time::createNtpPacket()
@@ -75,20 +80,18 @@ void Time::createNtpPacket()
 bool Time::syncTime(const IPAddress& addr)
 {	
 	createNtpPacket();
-	
-	EthernetUDP udp;
-	udp.begin(LOCAL_PORT);
+
 	udp.beginPacket(addr, NTP_PORT); 
 	udp.write(buffer, PACKET_SIZE);
 	udp.endPacket();
-	
+
 	delay(1000);
-	
+
 	if (!udp.parsePacket())
 		return false;
 
 	udp.read(buffer, PACKET_SIZE);
-		
+
 	time_t high = word(buffer[40], buffer[41]);
 	time_t low = word(buffer[42], buffer[43]);  
 	// NTP time is seconds since 1900
@@ -115,7 +118,7 @@ bool Time::isRunning() const
 	Wire.beginTransmission(DS1307_ADDRESS);
 	Wire.write(0);
 	Wire.endTransmission();
-	
+
 	Wire.requestFrom(DS1307_ADDRESS, 1);
 	byte sec = Wire.read();
 	return !(sec >> 7);
@@ -171,7 +174,7 @@ void Time::setSyncInterval(time_t intv)
 
 void Time::setTimeServer(const IPAddress& ip)
 {
-	ntpServer[1] = ip;
+	ntpServer[0] = ip;
 }
 
 void Time::setOffset(int offset)
@@ -181,7 +184,7 @@ void Time::setOffset(int offset)
 
 IPAddress Time::getTimeServer() const
 {
-	return ntpServer[1];
+	return ntpServer[0];
 }
 
 time_t Time::getSyncInterval() const

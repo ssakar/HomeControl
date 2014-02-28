@@ -20,7 +20,7 @@
 #define UTIL_H
 
 
-#define DEBUG
+//#define DEBUG
 
 template<class T>
 inline Print& operator<<(Print &p, T rhs)

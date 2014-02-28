@@ -36,6 +36,7 @@ class Time {
 public:
 	Time();
 	
+	void begin();
 	void syncTime(bool = false);
 	void setSyncInterval(time_t);
 	void setTimeServer(const IPAddress&);

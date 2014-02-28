@@ -49,7 +49,7 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1385;
+const uint32_t MAGIC = 1395;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SEND_REPEAT = 3;
@@ -141,7 +141,7 @@ void setup()
 	switchControl.enableReceive(PIN_RECV);
 	switchControl.enableTransmit(PIN_SEND);
 
-	time.syncTime(true);
+	time.begin();
 	server.begin();
 
 	DEBUG_PRINT("setup finished");
@@ -186,7 +186,6 @@ void loop()
 	}
 
 	if (long(millis()-wait) >= 0) {
-
 		for (int i = 0; i < schedules.getSize(); i++) {
 			applySchedule(schedules[i]);
 		}
@@ -518,6 +517,9 @@ void handleEventRules(EthernetClient& client)
 				eventRules[id].setToggle(true);
 			else
 				eventRules[id].setOn(v);
+		} else if (strcmp(key, "clearLog") == 0) {
+			if (webClient.getValueInt())
+				eventLog.clear();
 		} else
 			webClient.getValue(); // consume value of unknown key
 	}
@@ -862,7 +864,7 @@ void sendEvents(EthernetClient& client)
 	DEBUG_PRINT();
 	sendHeader(client);
 	client << F("<section id='main'><table><tr><th>Id</th><th>Time</th></tr>\n");
-	
+
 	for (int i = 0; i < eventLog.getSize(); i++) {
 		Event& ev = eventLog[i];
 		client << F("<tr><td>") <<
@@ -870,7 +872,12 @@ void sendEvents(EthernetClient& client)
 			DateTime(ev.getTime()) << F("</td></tr>\n");
 	}
 
-	client << F("</table></section>\n");
+	client << F("</table><br>\n") <<
+		F("<form action='/eventRules' method='POST'>") <<
+		F("<input type='hidden' name='clearLog' value='1'>") <<
+		F("<input type='submit' value='Clear'></form>") <<
+		F("</section>\n");
+
 	sendFooter(client);
 }
 
