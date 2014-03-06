@@ -16,6 +16,20 @@
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <ClientHelper.h>
+#include <DateTime.h>
+#include <Event.h>
+#include <HumidSensor.h>
+#include <LightSensor.h>
+#include <RingBuffer.h>
+#include <Schedule.h>
+#include <Sensor.h>
+#include <Switch.h>
+#include <TempSensor.h>
+#include <Time.h>
+#include <Util.h>
+#include <WebServer.h>
+#include <SavedArray.h>
 
 #include <SPI.h>
 #include <Wire.h>
@@ -24,21 +38,6 @@
 #include <RCSwitch.h>
 #include <OneWire.h>
 #include <DHT.h>
-
-#include <Util.h>
-#include <Switch.h>
-#include <Sensor.h>
-#include <DateTime.h>
-#include <Time.h>
-#include <Event.h>
-#include <Schedule.h>
-#include <TempSensor.h>
-#include <LightSensor.h>
-#include <HumidSensor.h>
-#include <ClientHelper.h>
-#include <WebServer.h>
-#include <SavedArray.h>
-#include <RingBuffer.h>
 
 
 const int PIN_DHT11 = 7;

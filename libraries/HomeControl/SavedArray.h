@@ -76,7 +76,11 @@ byte SavedArray<T, sz>::getSize() const
 template<class T, byte sz>
 void SavedArray<T, sz>::save()
 {
-	eeprom_update_block(data, eeprom, sizeof(T)*sz);	
+#if GCC_VERSION >= 40600
+	eeprom_update_block(data, eeprom, sizeof(T)*sz);
+#else
+	eeprom_write_block(data, eeprom, sizeof(T)*sz);
+#endif
 }
 
 template<class T, byte sz>
