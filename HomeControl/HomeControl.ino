@@ -177,9 +177,11 @@ void loop()
 	}
 
 	if (switchControl.available()) {
-
 		unsigned long id = switchControl.getReceivedValue();
-		applyEventRules(id);
+		for (int i = 0; i < eventRules.getSize(); i++) {
+			EventRule& rule = eventRules[i];
+			applyEventRules(rule, id);
+		}
 		logEvent(id);
 		switchControl.resetAvailable();
 	}
@@ -223,29 +225,24 @@ void logEvent(unsigned long id)
 	DEBUG_PRINT(ev.getId());
 }
 
-void applyEventRules(unsigned long id)
+void applyEventRules(const EventRule& rule, unsigned long id)
 {
-	for (int i = 0; i < eventRules.getSize(); i++) {
+	if (!rule.isActive())
+		return;
 
-		EventRule& rule = eventRules[i];
+	if (rule.getEventId() != id)
+		return;
 
-		if (!rule.isActive())
-			continue;
+	if (rule.getSwitchId() >= MAX_SWITCHES)
+		return;
 
-		if (rule.getSwitchId() >= MAX_SWITCHES)
-			continue;
+	Switch& sw = switches[rule.getSwitchId()];
 
-		Switch& sw = switches[rule.getSwitchId()];
+	if (!sw.isActive())
+		return;
 
-		if (!sw.isActive())
-			continue;
-
-		if (rule.getEventId() != id)
-			continue;
-
-		if (rule.toggle() || rule.turnOn() != sw.isOn())
-			doSwitch(sw, !sw.isOn());
-	}
+	if (rule.toggle() || rule.turnOn() != sw.isOn())
+		doSwitch(sw, !sw.isOn());
 }
 
 void applySchedule(const Schedule& sched)
@@ -323,8 +320,10 @@ void handleGetRequest(EthernetClient& client)
 
 	if (!uri || strcmp(uri, "status") == 0) {
 		sendStatus(client);
-	} else if (strcmp(uri,"control") == 0) {
+	} else if (strcmp(uri, "control") == 0) {
 		handleControl(client);
+	} else if (strcmp(uri, "favicon.ico") == 0) {
+		sendError(client);
 	} else if (!webClient.isAuthorized(webServer.getPassw())) {
 		sendAuth(client);
 	} else if (strcmp(uri, "switch") == 0) {
