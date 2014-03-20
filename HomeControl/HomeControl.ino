@@ -66,6 +66,7 @@ const char* URI_EVENT_RULES = "eventRules";
 const char* URI_SCHEDULE = "schedule";
 const char* URI_STATUS = "status";
 const char* URI_CONTROL = "control";
+const char* URI_MOBILE = "mobile";
 const char* URI_FAVICON = "favicon.ico";
 const char* URI_EVENT = "event";
 const char* URI_SETTING = "setting";
@@ -332,6 +333,8 @@ void handleGetRequest(EthernetClient& client)
 		sendStatus(client);
 	} else if (strcmp(uri, URI_CONTROL) == 0) {
 		handleControl(client);
+	} else if (strcmp(uri, URI_MOBILE) == 0) {
+		sendMobile(client);
 	} else if (strcmp(uri, URI_FAVICON) == 0) {
 		sendError(client);
 	} else if (!webClient.isAuthorized(webServer.getPassw())) {
@@ -401,10 +404,14 @@ void handleControl(EthernetClient& client)
 				goto ERROR;
 			Switch& sw = switches[id];
 			doSwitch(sw, !sw.isOn());
+		} else if (strcmp(key, "redirect") == 0) {
+			redirect(client, webClient.getValue());
+			return;
 		} else {
 			webClient.getValue(); // consume value of unknown key
 		}
 	}
+	sendHtmlHeader(client);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -686,8 +693,8 @@ void sendHeader(EthernetClient& client)
 		F("<style type='text/css'>") <<
 		F("body {color: white; background: black;}") <<
 		F("a {color: white; background: black;}") <<
-		F("fieldset.inline-block {display: inline-block;min-width: 300px;}") <<
-		F("label {display: block;width: 100px;float: left;margin: 2px 4px 6px 4px;text-align: right;}") <<
+		F("fieldset.inline-block {display: inline-block; min-width: 300px;}") <<
+		F("label {display: block; width: 100px; float: left; margin: 2px 4px 6px 4px; text-align: right;}") <<
 		F("br {clear: left;}") <<
 		F("</style></head>") <<
 		F("<body><header><h1>HomeControl</h1><hr></header>") <<
@@ -703,10 +710,39 @@ void sendFooter(EthernetClient& client)
 {
 	DEBUG_PRINT();
 	client << F("<footer><hr>") <<
-		F("Free RAM: ") << freeRam() <<
+		F("<a href='mobile'>Mobile</a> | <a href='status'>Desktop</a>") <<
+		F("<br>Free RAM: ") << freeRam() <<
 		F("<br>Time: ") << time.getTime() <<
 		F("<br>Uptime: ") << millis()/1000 <<
 		F("</footer></body></html>\n");
+}
+
+void sendMobile(EthernetClient& client)
+{
+	DEBUG_PRINT();
+	sendHtmlHeader(client);
+	client << F("<!DOCTYPE html><html><head><title>HomeControl</title>") <<
+		F("<meta name='viewport' content='width=device-width, initial-scale=1, maximum-scale=1'>") <<
+		F("<style type='text/css'>body {color: white; background: black;}") <<
+		F("a {color: white;} a.btn {display: inline-block; padding: 15px; margin: 5px;") <<
+		F("border: 1px solid #303030; background-color: #909090; width: 100px;") <<
+		F("height: 100px; text-align: center; text-decoration: none;") <<
+		F("font-size: large; font-weight: bold;} a.on {background-color: #000066;}") <<
+		F("</style></head>") <<
+		F("<body><section id='main'><center>\n");
+
+	for (int i = 0; i < switches.getSize(); i++) {
+		Switch& sw = switches[i];
+
+		if (!sw.isActive())
+			continue;
+
+		client << (sw.isOn() ? F("<a class='btn on' href='control?switchoff=") :
+			F("<a class='btn' href='control?switchon=")) << i <<
+			F("&redirect=mobile&'>") << sw.getName() << F("</a>\n");
+	}
+	client << F("</center></section>\n");
+	sendFooter(client);
 }
 
 void sendStatus(EthernetClient& client)
@@ -733,7 +769,8 @@ void sendStatus(EthernetClient& client)
 			i << F("</td><td>") <<
 			sw.getName() << F("</td><td>") <<
 			F("<a href='control?switch") << (sw.isOn() ? "off=" : "on=") << i <<
-			F("'>Turn ") << (sw.isOn() ? "Off" : "On") << F("</a></td></tr>\n");
+			F("&redirect=status&'>Turn ") << (sw.isOn() ? "Off" : "On") <<
+			F("</a></td></tr>\n");
 	}
 	client << F("</table></section>\n");
 	sendFooter(client);
@@ -773,7 +810,7 @@ void sendSwitches(EthernetClient& client)
 			sw.getDevice() << F("</td><td>") <<
 			(sw.isPin() ? "Yes/" : "No/") << sw.getId() << F("</td><td>") <<
 			(sw.isOn() ? "On" : "Off") << F("</td><td>") <<
-			F("<a href='control?toggle=") << i << F("'>toggle</a></td></tr>\n");
+			F("<a href='control?toggle=") << i << F("&redirect=switch&'>toggle</a></td></tr>\n");
 	}
 	client << F("</table></section>\n");
 	sendFooter(client);
