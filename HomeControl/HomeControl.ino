@@ -59,6 +59,16 @@ const int MAX_SCHEDULES = 32;
 const int MAX_RULES = 32;
 const int MAX_EVENTS = 32;
 
+const char* URI_TIME = "time";
+const char* URI_SERVER = "server";
+const char* URI_SWITCH = "switch";
+const char* URI_EVENT_RULES = "eventRules";
+const char* URI_SCHEDULE = "schedule";
+const char* URI_STATUS = "status";
+const char* URI_CONTROL = "control";
+const char* URI_FAVICON = "favicon.ico";
+const char* URI_EVENT = "event";
+const char* URI_SETTING = "setting";
 
 EEMEM uint32_t magic_ee;
 /* BUG 
@@ -318,23 +328,23 @@ void handleGetRequest(EthernetClient& client)
 	const char* uri = webClient.getRequestURI('c');
 	DEBUG_PRINT(uri);
 
-	if (!uri || strcmp(uri, "status") == 0) {
+	if (!uri || strcmp(uri, URI_STATUS) == 0) {
 		sendStatus(client);
-	} else if (strcmp(uri, "control") == 0) {
+	} else if (strcmp(uri, URI_CONTROL) == 0) {
 		handleControl(client);
-	} else if (strcmp(uri, "favicon.ico") == 0) {
+	} else if (strcmp(uri, URI_FAVICON) == 0) {
 		sendError(client);
 	} else if (!webClient.isAuthorized(webServer.getPassw())) {
 		sendAuth(client);
-	} else if (strcmp(uri, "switch") == 0) {
+	} else if (strcmp(uri, URI_SWITCH) == 0) {
 		sendSwitches(client);
-	} else if (strcmp(uri, "schedule") == 0) {
+	} else if (strcmp(uri, URI_SCHEDULE) == 0) {
 		sendSchedules(client);
-	} else if (strcmp(uri, "event") == 0) {
+	} else if (strcmp(uri, URI_EVENT) == 0) {
 		sendEvents(client);
-	} else if (strcmp(uri, "eventRules") == 0) {
+	} else if (strcmp(uri, URI_EVENT_RULES) == 0) {
 		sendEventRules(client);
-	} else if (strcmp(uri, "setting") == 0) {
+	} else if (strcmp(uri, URI_SETTING) == 0) {
 		sendSettings(client);
 	} else {
 		sendError(client);
@@ -353,15 +363,15 @@ void handlePostRequest(EthernetClient& client)
 	}
 	webClient.skipHeader();
 
-	if (strcmp(uri, "time") == 0) {
+	if (strcmp(uri, URI_TIME) == 0) {
 		handleTime(client);
-	} else if (strcmp(uri, "server") == 0) {
+	} else if (strcmp(uri, URI_SERVER) == 0) {
 		handleServer(client);
-	} else if (strcmp(uri, "switch") == 0) {
+	} else if (strcmp(uri, URI_SWITCH) == 0) {
 		handleSwitches(client);
-	} else if (strcmp(uri, "eventRules") == 0) {
+	} else if (strcmp(uri, URI_EVENT_RULES) == 0) {
 		handleEventRules(client);
-	} else if (strcmp(uri, "schedule") == 0) {
+	} else if (strcmp(uri, URI_SCHEDULE) == 0) {
 		handleSchedules(client);
 	} else {
 		sendError(client);
@@ -395,7 +405,6 @@ void handleControl(EthernetClient& client)
 			webClient.getValue(); // consume value of unknown key
 		}
 	}
-	redirectStatus(client);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -426,7 +435,7 @@ void handleTime(EthernetClient& client)
 			webClient.getValue(); // consume value of unknown key
 	}
 	timeConf.save();
-	redirectStatus(client);
+	redirect(client, URI_TIME);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -483,7 +492,7 @@ void handleServer(EthernetClient& client)
 	}
 	if (reboot)
 		reset();
-	redirectStatus(client);
+	redirect(client, URI_SERVER);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -522,7 +531,7 @@ void handleEventRules(EthernetClient& client)
 			webClient.getValue(); // consume value of unknown key
 	}
 	eventRules.save();
-	redirectStatus(client);
+	redirect(client, URI_EVENT_RULES);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -559,7 +568,7 @@ void handleSwitches(EthernetClient& client)
 	}
 	switches[id].setPin(pin);
 	switches.save();
-	redirectStatus(client);
+	redirect(client, URI_SWITCH);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -641,7 +650,7 @@ void handleSchedules(EthernetClient& client)
 	if (w.days != 0)
 		schedules[id].setDays(w);
 	schedules.save();
-	redirectStatus(client);
+	redirect(client, URI_SCHEDULE);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -660,14 +669,20 @@ void sendError(EthernetClient& client)
 
 }
 
-void sendHeader(EthernetClient& client)
+void sendHtmlHeader(EthernetClient& client)
 {
 	DEBUG_PRINT();
 	client << F("HTTP/1.0 200 OK\r\n") << 
 		F("Content-Type: text/html\r\n") << 
 		F("Connection: close\r\n") << 
-		F("\r\n") <<
-		F("<!DOCTYPE html><html><head><title>HomeControl</title>") <<
+		F("\r\n");
+}
+
+void sendHeader(EthernetClient& client)
+{
+	DEBUG_PRINT();
+	sendHtmlHeader(client);
+	client << F("<!DOCTYPE html><html><head><title>HomeControl</title>") <<
 		F("<style type='text/css'>") <<
 		F("body {color: white; background: black;}") <<
 		F("a {color: white; background: black;}") <<
@@ -914,12 +929,12 @@ void sendBadConfig(EthernetClient& client)
 	sendError(client);
 }
 
-void redirectStatus(EthernetClient& client)
+void redirect(EthernetClient& client, const char* uri)
 {
 	DEBUG_PRINT();
 	client << F("HTTP/1.0 303 See Other\r\n") << 
-		F("Location: /status\r\n") << 
-		F("\r\n");
+		F("Location: /") << uri <<
+		F("\r\n\r\n");
 }
 
 void sendAuth(EthernetClient& client)
