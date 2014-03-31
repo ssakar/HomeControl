@@ -442,7 +442,7 @@ void handleTime(EthernetClient& client)
 			webClient.getValue(); // consume value of unknown key
 	}
 	timeConf.save();
-	redirect(client, URI_TIME);
+	redirect(client, URI_SETTING);
 	return;
 ERROR:
 	sendBadConfig(client);
@@ -499,7 +499,7 @@ void handleServer(EthernetClient& client)
 	}
 	if (reboot)
 		reset();
-	redirect(client, URI_SERVER);
+	redirect(client, URI_SETTING);
 	return;
 ERROR:
 	sendBadConfig(client);
