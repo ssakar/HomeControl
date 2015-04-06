@@ -31,6 +31,7 @@ class Switch {
 	bool on : 1;
 	bool pin : 1;
 	bool active : 1;
+	bool scheduled : 1;
 
 	byte id;
 	char name[SWITCH_NAME_SIZE+1];
@@ -53,6 +54,9 @@ public:
 
 	bool isActive() const;
 	void setActive(bool);
+
+	bool isScheduled() const;
+	void setScheduled(bool);
 
 	void setName(const char*);
 	const char* getName() const;

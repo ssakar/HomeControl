@@ -48,7 +48,7 @@ const int PIN_RECV = 0;
 // analog
 const int PIN_LIGHT = 0;
 
-const uint32_t MAGIC = 1395;
+const uint32_t MAGIC = 1410;
 const uint32_t WAIT_PERIOD = 60000;
 const int EVENT_DELAY = 5;
 const int SEND_REPEAT = 3;
@@ -236,6 +236,32 @@ void logEvent(unsigned long id)
 	DEBUG_PRINT(ev.getId());
 }
 
+void doSwitch(Switch& sw, bool state, bool manual = false)
+{
+	if (sw.isPin()) {
+		pinMode(sw.getId(), OUTPUT);
+		digitalWrite(sw.getId(), state);
+	} else if (state) {
+		for (int i = 0; i < SEND_REPEAT; i++) {
+			switchControl.switchOn(sw.getGroup(), sw.getDevice());
+			delay(5);
+		}
+	} else {
+		for (int i = 0; i < SEND_REPEAT; i++) {
+			switchControl.switchOff(sw.getGroup(), sw.getDevice());
+			delay(5);
+		}
+	}
+	if (!manual)
+		sw.setOn(state);
+	DEBUG_PRINT("switched");
+}
+
+void doManualSwitch(Switch& sw, bool state)
+{
+	doSwitch(sw, state, true);
+}
+
 void applyEventRules(const EventRule& rule, unsigned long id)
 {
 	if (!rule.isActive())
@@ -252,8 +278,10 @@ void applyEventRules(const EventRule& rule, unsigned long id)
 	if (!sw.isActive())
 		return;
 
-	if (rule.toggle() || rule.turnOn() != sw.isOn())
+	if (rule.toggle())
 		doSwitch(sw, !sw.isOn());
+	else
+		doManualSwitch(sw, rule.turnOn());
 }
 
 void applySchedule(const Schedule& sched)
@@ -301,26 +329,6 @@ void applySchedule(const Schedule& sched)
 
 	if (change) 
 		doSwitch(sw, !sw.isOn());
-}
-
-void doSwitch(Switch& sw, bool state)
-{
-	if (sw.isPin()) {
-		pinMode(sw.getId(), OUTPUT);
-		digitalWrite(sw.getId(), state);
-	} else if (state) {
-		for (int i = 0; i < SEND_REPEAT; i++) {
-			switchControl.switchOn(sw.getGroup(), sw.getDevice());
-			delay(5);
-		}
-	} else {
-		for (int i = 0; i < SEND_REPEAT; i++) {
-			switchControl.switchOff(sw.getGroup(), sw.getDevice());
-			delay(5);
-		}
-	}
-	sw.setOn(state);
-	DEBUG_PRINT("switched");
 }
 
 void handleGetRequest(EthernetClient& client)
@@ -392,12 +400,12 @@ void handleControl(EthernetClient& client)
 			byte id = webClient.getValueInt();
 			if (id >= switches.getSize())
 				goto ERROR;
-			doSwitch(switches[id], true);
+			doManualSwitch(switches[id], true);
 		} else if (strcmp(key, "switchoff") == 0) {
 			byte id = webClient.getValueInt();
 			if (id >= switches.getSize())
 				goto ERROR;
-			doSwitch(switches[id], false);
+			doManualSwitch(switches[id], false);
 		} else if (strcmp(key, "toggle") == 0) {
 			byte id = webClient.getValueInt();
 			if (id >= switches.getSize())
@@ -585,7 +593,8 @@ void handleSchedules(EthernetClient& client)
 {
 	ClientHelper webClient(&client);
 	char* key = NULL;
-	byte id = 0;
+	byte id = 0, swid = 0;
+	bool active = false;
 	Week_t w;
 	w.days = 0;
 
@@ -596,16 +605,17 @@ void handleSchedules(EthernetClient& client)
 			if (id >= schedules.getSize())
 				goto ERROR;
 		} else if (strcmp(key, "active") == 0) {
-			schedules[id].setActive(webClient.getValueInt());
+			active = webClient.getValueInt();
+			schedules[id].setActive(active);
 		} else if (strcmp(key, "name") == 0) {
 			schedules[id].setName(webClient.getValue());
 		} else if (strcmp(key, "switch") == 0) {
-			byte v = webClient.getValueInt();
-			if (id < switches.getSize())
-				schedules[id].setSwitchId(v);
+			swid = webClient.getValueInt();
+			if (swid < switches.getSize())
+				schedules[id].setSwitchId(swid);
 		} else if (strcmp(key, "sensor") == 0) {
 			byte v = webClient.getValueInt();
-			if (id < MAX_SENSORS)
+			if (v < MAX_SENSORS)
 				schedules[id].setSensorId(v);
 		} else if (strcmp(key, "threshold") == 0) {
 			schedules[id].setThreshold(webClient.getValueFloat());
@@ -656,6 +666,8 @@ void handleSchedules(EthernetClient& client)
 	}
 	if (w.days != 0)
 		schedules[id].setDays(w);
+	switches[swid].setScheduled(active);
+	switches.save();
 	schedules.save();
 	redirect(client, URI_SCHEDULE);
 	return;
@@ -734,11 +746,11 @@ void sendMobile(EthernetClient& client)
 	for (int i = 0; i < switches.getSize(); i++) {
 		Switch& sw = switches[i];
 
-		if (!sw.isActive())
+		if (!sw.isActive() || sw.isScheduled())
 			continue;
 
-		client << (sw.isOn() ? F("<a class='btn on' href='control?switchoff=") :
-			F("<a class='btn' href='control?switchon=")) << i <<
+		client << F("<a class='btn") << (sw.isOn() ? " on" : "") <<
+			F("' href='control?toggle=") << i <<
 			F("&redirect=mobile&'>") << sw.getName() << F("</a>\n");
 	}
 	client << F("</center></section>\n");
@@ -768,9 +780,10 @@ void sendStatus(EthernetClient& client)
 		client << F("<tr><td>") <<
 			i << F("</td><td>") <<
 			sw.getName() << F("</td><td>") <<
-			F("<a href='control?switch") << (sw.isOn() ? "off=" : "on=") << i <<
-			F("&redirect=status&'>Turn ") << (sw.isOn() ? "Off" : "On") <<
-			F("</a></td></tr>\n");
+			F("<a href='control?switchon=") << i << F("&redirect=status&'>On</a> | ") <<
+			F("<a href='control?switchoff=") << i << F("&redirect=status&'>Off</a> | ") <<
+			F("<a href='control?toggle=") << i << F("&redirect=status&'>Toggle</a>") <<
+			F("</td></tr>\n");
 	}
 	client << F("</table></section>\n");
 	sendFooter(client);
@@ -796,7 +809,7 @@ void sendSwitches(EthernetClient& client)
 
 		F("<table><tr><th>Id</th><th>Name</th><th>Group</th>") <<
 		F("<th>Device</th><th>Pin</th><th>State</th><th></th></tr>\n");
-	
+
 	for (int i = 0; i < switches.getSize(); i++) {
 		Switch& sw = switches[i];
 
@@ -809,8 +822,7 @@ void sendSwitches(EthernetClient& client)
 			sw.getGroup() << F("</td><td>") <<
 			sw.getDevice() << F("</td><td>") <<
 			(sw.isPin() ? "Yes/" : "No/") << sw.getId() << F("</td><td>") <<
-			(sw.isOn() ? "On" : "Off") << F("</td><td>") <<
-			F("<a href='control?toggle=") << i << F("&redirect=switch&'>toggle</a></td></tr>\n");
+			(sw.isOn() ? "On" : "Off") << F("</td></tr>\n");
 	}
 	client << F("</table></section>\n");
 	sendFooter(client);

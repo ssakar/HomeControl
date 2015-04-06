@@ -26,7 +26,7 @@ char device_buf[MAX_SIZE] = {0};
 
 
 Switch::Switch()
-	:group(0), device(0), id(0), on(0), pin(0), active(0)
+	:group(0), device(0), id(0), on(0), pin(0), active(0), scheduled(0)
 {
 	memcpy(name, 0, sizeof(name));
 }
@@ -108,6 +108,16 @@ void Switch::setPin(bool _pin)
 bool Switch::isActive() const
 {
 	return active;
+}
+
+void Switch::setScheduled(bool sched)
+{
+	scheduled = sched;
+}
+
+bool Switch::isScheduled() const
+{
+	return scheduled;
 }
 
 void Switch::setActive(bool act)
