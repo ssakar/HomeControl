@@ -236,6 +236,15 @@ void logEvent(unsigned long id)
 	DEBUG_PRINT(ev.getId());
 }
 
+const char* getEventName(Event& ev)
+{
+	for (int i = 0; i < eventRules.getSize(); i++) {
+		if (eventRules[i].getEventId() == ev.getId())
+			return eventRules[i].getName();
+	}
+	return NULL;
+}
+
 void doSwitch(Switch& sw, bool state, bool manual = false)
 {
 	if (sw.isPin()) {
@@ -929,8 +938,15 @@ void sendEvents(EthernetClient& client)
 
 	for (int i = 0; i < eventLog.getSize(); i++) {
 		Event& ev = eventLog[i];
-		client << F("<tr><td>") <<
-			ev.getId() << F("</td><td>") <<
+		const char* name = getEventName(ev);
+
+		client << F("<tr><td>");
+		if (name)
+			client << name;
+		else
+			client << ev.getId();
+
+		client << F("</td><td>") <<
 			DateTime(ev.getTime()) << F("</td></tr>\n");
 	}
 
