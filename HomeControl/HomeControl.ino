@@ -57,7 +57,7 @@ const int MAX_SENSORS = 3;
 const int MAX_SWITCHES = 16;
 const int MAX_SCHEDULES = 32;
 const int MAX_RULES = 32;
-const int MAX_EVENTS = 32;
+const int MAX_EVENTS = 64;
 
 const char* URI_TIME = "time";
 const char* URI_SERVER = "server";

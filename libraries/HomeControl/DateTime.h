@@ -51,6 +51,8 @@ class DateTime : public Printable {
 	int year;		// e.g. 2014
 
 	time_t toUnix(const DateTime&) const;
+	size_t printFormat(Print&, int, const char*) const;
+	size_t printDayOfWeek(Print&) const;
 public:
 	DateTime();
 	DateTime(time_t);

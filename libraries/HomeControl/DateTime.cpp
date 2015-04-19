@@ -190,23 +190,62 @@ bool DateTime::operator<(const DateTime& dt) const
 size_t DateTime::printTo(Print& p) const
 {
 	size_t n = 0;
-	
-	if (hour < 10)
-		n += p.print(0);
-	
-	n += p.print(hour);
-	n += p.print(":");
-	
-	if (minute < 10)
-		n += p.print(0);
-	
-	n += p.print(minute);
-	n += p.print(":");
-	
-	if (second < 10)
-		n += p.print(0);
-	
-	n += p.print(second);
+
+	n += printDayOfWeek(p);
+
+	n += printFormat(p, day, ".");
+	n += printFormat(p, month, ".");
+	n += printFormat(p, year, " ");
+
+	n += printFormat(p, hour, ":");
+	n += printFormat(p, minute, ":");
+	n += printFormat(p, second, NULL);
 
 	return n;
 }
+
+size_t DateTime::printDayOfWeek(Print& p) const
+{
+	size_t n = 0;
+
+	switch (dow) {
+	case 1:
+		n += p.print("Sun");
+		break;
+	case 2:
+		n += p.print("Mon");
+		break;
+	case 3:
+		n += p.print("Tue");
+		break;
+	case 4:
+		n += p.print("Wed");
+		break;
+	case 5:
+		n += p.print("Thu");
+		break;
+	case 6:
+		n += p.print("Fri");
+		break;
+	case 7:
+		n += p.print("Sat");
+		break;
+	}
+	n += p.print(" ");
+
+	return n;
+}
+
+size_t DateTime::printFormat(Print& p, int time, const char* del) const
+{
+	size_t n = 0;
+
+	if (time < 10)
+		n += p.print(0);
+	n += p.print(time);
+	if (del)
+		n += p.print(del);
+
+	return n;
+}
+
